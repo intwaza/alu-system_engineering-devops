@@ -1,37 +1,35 @@
 #!/usr/bin/env bash
-# Script to configure Nginx with custom HTTP response header
-# shellcheck disable=SC2154
+# Configures Nginx to add a custom HTTP header X-Served-By
 
-# Update package list
-apt-get update -y
+# Install Nginx if not already installed
+apt-get update
+apt-get install -y nginx
 
-# Install Nginx
-apt-get install nginx -y
-
-# Get the hostname of the server
-HOSTNAME=$(hostname)
-
-# Create a custom HTML page with "Holberton School"
+mkdir -p /var/www/html
 echo "Holberton School for the win!" > /var/www/html/index.html
-
-# Create custom 404 error page
 echo "Ceci n'est pas une page" > /var/www/html/404.html
 
-# Add custom header to Nginx default site configuration
-# Remove any existing X-Served-By headers first
-sed -i '/add_header X-Served-By/d' /etc/nginx/sites-available/default
+HOSTNAME=$(hostname)
 
-# Add the custom header to the server block
-sed -i "/server_name _;/a \    add_header X-Served-By \$hostname;" /etc/nginx/sites-available/default
+printf %s "server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    root /var/www/html;
+    index index.html index.htm;
+    server_name _;
+    add_header X-Served-By $HOSTNAME always;
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+    location /redirect_me {
+        return 301 https://www.youtube.com/watch?v=QH2-TGUlwu4;
+    }
+    error_page 404 /404.html;
+    location = /404.html {
+        root /var/www/html;
+        internal;
+    }
+}
+" > /etc/nginx/sites-available/default
 
-# Configure the redirect in Nginx default site
-sed -i '/server_name _;/a \    location /redirect_me {\n        return 301 https://www.youtube.com/watch?v=QH2-TGUlwu4;\n    }' /etc/nginx/sites-available/default
-
-# Configure custom 404 page in Nginx
-sed -i '/server_name _;/a \    error_page 404 /404.html;\n    location = /404.html {\n        internal;\n    }' /etc/nginx/sites-available/default
-
-# Start Nginx service
-service nginx start
-
-# Restart Nginx to apply changes
 service nginx restart
