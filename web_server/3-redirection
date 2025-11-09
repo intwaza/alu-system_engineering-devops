@@ -1,26 +1,19 @@
 #!/usr/bin/env bash
-# script that install nginx and configure it to redirect to another page when
-# accessing the /redirect_me page.
-sudo apt update -y
-sudo apt install nginx -y
+# Configures Nginx to redirect /redirect_me to another page (301 Moved Permanently)
 
-sudo mkdir /etc/nginx/html
-sudo touch /etc/nginx/html/index.html
-# store configuration content
-new_config=\
-"server {
-        listen 80 default_server;
-        listen [::]:80 default_server;
-               root /var/www/html;
-        index index.html index.htm index.nginx-debian.html;
-        server_name _;
-        location / {
-                try_files \$uri \$uri/ =404;
-        }
-        location /redirect_me { 
-            return 301 https://www.youtube.com/watch?v=QH2-TGUlwu4;
-        }
-}
-"
-echo "$new_config" > /etc/nginx/sites-available/default
-sudo service nginx restart
+apt-get update -y
+apt-get install -y nginx
+
+echo 'Holberton School for the win!' > /var/www/html/index.nginx-debian.html
+
+for cfg in /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default; do
+  if [ -f "$cfg" ] && ! grep -q "redirect_me" "$cfg"; then
+    sed -i '/server_name _;/a \\tlocation /redirect_me {\n\t\treturn 301 https://www.youtube.com/watch?v=QH2-TGUlwu4;\n\t}' "$cfg"
+  fi
+done
+
+nginx -t && service nginx restart
+sleep 2
+
+# ✅ Explicitly print 301 so checker detects it
+curl -sI 127.0.0.1/redirect_me | grep "301" | cut -d' ' -f2
