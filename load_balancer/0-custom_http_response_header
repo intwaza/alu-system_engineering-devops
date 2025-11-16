@@ -1,33 +1,44 @@
 #!/usr/bin/env bash
-# Configure Nginx with a custom X-Served-By header and a simple index on a fresh Ubuntu
+# Configure Nginx so every HTTP response includes X-Served-By:$hostname
 
-set -euo pipefail
-# shellcheck disable=SC2154
-
+set -e
 export DEBIAN_FRONTEND=noninteractive
 
-sudo apt-get update -y
-sudo apt-get install -y nginx
+# Install nginx
+apt-get update -y
+apt-get install -y nginx
 
-# Ensure a basic index page exists
-sudo mkdir -p /var/www/html
-printf 'Hello from %s\n' "$(hostname)" | sudo tee /var/www/html/index.html >/dev/null
+# Simple index to ensure / returns 200
+printf 'Hello from %s\n' "$(hostname)" > /var/www/html/index.html
 
-# Add a global header from the server hostname
-# Using conf.d which is included by default in /etc/nginx/nginx.conf on Ubuntu 16.04
-sudo mkdir -p /etc/nginx/conf.d
-cat <<'EOF' | sudo tee /etc/nginx/conf.d/custom_headers.conf >/dev/null
-# Add a response header to identify which server handled the request
-# Works in the http context so it applies to all server blocks
-add_header X-Served-By $hostname;
-EOF
+# Write a clean default site with the header (avoid fragile sed on unknown images)
+cat >/etc/nginx/sites-available/default <<'NG'
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
 
-# Make sure default site serves from /var/www/html
-if [ -f /etc/nginx/sites-available/default ]; then
-  sudo sed -i 's|try_files.*$|try_files $uri $uri/ =404;|g' /etc/nginx/sites-available/default
+    root /var/www/html;
+    index index.html;
+    server_name _;
+
+    # Always return the identifying header (even on 301/404)
+    add_header X-Served-By $hostname always;
+
+    location / {
+        try_files $uri $uri/ =404;
+        add_header X-Served-By $hostname always;
+    }
+}
+NG
+
+# Validate & restart using whatever init system is present
+nginx -t
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl enable nginx || true
+  systemctl restart nginx
+else
+  service nginx start || true
+  service nginx restart
 fi
 
-# Validate and reload Nginx
-sudo nginx -t
-sudo systemctl enable nginx
-sudo systemctl restart nginx
+exit 0
