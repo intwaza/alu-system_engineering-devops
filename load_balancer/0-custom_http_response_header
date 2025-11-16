@@ -1,35 +1,33 @@
 #!/usr/bin/env bash
-# Configures Nginx to add a custom HTTP header X-Served-By
+# Configure Nginx with a custom X-Served-By header and a simple index on a fresh Ubuntu
 
-# Install Nginx if not already installed
-apt-get update
-apt-get install -y nginx
+set -euo pipefail
+# shellcheck disable=SC2154
 
-mkdir -p /var/www/html
-echo "Holberton School for the win!" > /var/www/html/index.html
-echo "Ceci n'est pas une page" > /var/www/html/404.html
+export DEBIAN_FRONTEND=noninteractive
 
-HOSTNAME=$(hostname)
+sudo apt-get update -y
+sudo apt-get install -y nginx
 
-printf %s "server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
-    root /var/www/html;
-    index index.html index.htm;
-    server_name _;
-    add_header X-Served-By $HOSTNAME always;
-    location / {
-        try_files \$uri \$uri/ =404;
-    }
-    location /redirect_me {
-        return 301 https://www.youtube.com/watch?v=QH2-TGUlwu4;
-    }
-    error_page 404 /404.html;
-    location = /404.html {
-        root /var/www/html;
-        internal;
-    }
-}
-" > /etc/nginx/sites-available/default
+# Ensure a basic index page exists
+sudo mkdir -p /var/www/html
+printf 'Hello from %s\n' "$(hostname)" | sudo tee /var/www/html/index.html >/dev/null
 
-service nginx restart
+# Add a global header from the server hostname
+# Using conf.d which is included by default in /etc/nginx/nginx.conf on Ubuntu 16.04
+sudo mkdir -p /etc/nginx/conf.d
+cat <<'EOF' | sudo tee /etc/nginx/conf.d/custom_headers.conf >/dev/null
+# Add a response header to identify which server handled the request
+# Works in the http context so it applies to all server blocks
+add_header X-Served-By $hostname;
+EOF
+
+# Make sure default site serves from /var/www/html
+if [ -f /etc/nginx/sites-available/default ]; then
+  sudo sed -i 's|try_files.*$|try_files $uri $uri/ =404;|g' /etc/nginx/sites-available/default
+fi
+
+# Validate and reload Nginx
+sudo nginx -t
+sudo systemctl enable nginx
+sudo systemctl restart nginx
