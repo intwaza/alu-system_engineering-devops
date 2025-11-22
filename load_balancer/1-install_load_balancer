@@ -42,7 +42,7 @@ frontend http-in
 backend web-backend
     balance roundrobin
     option httpchk GET /
-    server web-01 3.83.224.222:80 check
+    server web-01 3.88.188.216:80 check
     server web-02 3.88.188.216:80 check
 EOF
 
