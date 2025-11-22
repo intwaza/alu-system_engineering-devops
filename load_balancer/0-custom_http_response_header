@@ -1,51 +1,16 @@
 #!/usr/bin/env bash
-# Configure Nginx so every HTTP response includes X-Served-By:$hostname
+#Bash script that installs HAProxy & makes configurations
 
-set -e
-export DEBIAN_FRONTEND=noninteractive
-
-# Use sudo only if not running as root
-if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; else SUDO=""; fi
-
-$SUDO apt-get update -y
-$SUDO apt-get install -y nginx
-
-# Minimal index so / returns 200
-printf 'Hello from %s\n' "$(hostname)" | $SUDO tee /var/www/html/index.html >/dev/null
-
-# Write a clean default site that always adds the header
-$SUDO tee /etc/nginx/sites-available/default >/dev/null <<'NG'
-server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
-
-    root /var/www/html;
-    index index.html;
-    server_name _;
-
-    add_header X-Served-By $hostname always;
-
-    location / {
-        try_files $uri $uri/ =404;
-        add_header X-Served-By $hostname always;
-    }
-}
-NG
-
-# Ensure sites-enabled exists and the default site is enabled
-$SUDO mkdir -p /etc/nginx/sites-enabled
-if [ ! -L /etc/nginx/sites-enabled/default ]; then
-  $SUDO ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
-fi
-
-# Validate and restart Nginx (systemd or SysV)
-$SUDO nginx -t
-if command -v systemctl >/dev/null 2>&1; then
-  $SUDO systemctl enable nginx || true
-  $SUDO systemctl restart nginx
-else
-  $SUDO service nginx start || true
-  $SUDO service nginx restart
-fi
-
-exit 0
+apt-get -y install software-properties-common
+add-apt-repository ppa:vbernat/haproxy-1.8
+apt-get update
+apt-get -y install haproxy
+echo "ENABLED=1" >> /etc/default/haproxy
+printf %s "listen 6084-webs
+    bind *:80
+    mode http
+    balance roundrobin
+    server 6084-web-02 34.235.116.10:80 check
+    server 6084-web-01 54.82.63.47:80 check
+" >> /etc/haproxy/haproxy.cfg
+sudo service haproxy restart
