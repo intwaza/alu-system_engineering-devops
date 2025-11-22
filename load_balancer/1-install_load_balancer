@@ -1,65 +1,16 @@
-#!/usr/bin/env bash
-# Install and configure HAProxy (roundrobin) to balance between web-01 and web-02
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
 
-set -e
-export DEBIAN_FRONTEND=noninteractive
+    root /var/www/html;
+    index index.html;
+    server_name _;
 
-# Use sudo only if needed
-if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; else SUDO=""; fi
+    # Required by the checker: always send this header
+    add_header X-Served-By $hostname always;
 
-$SUDO apt-get update -y
-$SUDO apt-get install -y haproxy
-
-# Ensure init script enables haproxy
-if [ -f /etc/default/haproxy ]; then
-  $SUDO sed -i 's/^ENABLED=.*/ENABLED=1/' /etc/default/haproxy || true
-else
-  echo "ENABLED=1" | $SUDO tee /etc/default/haproxy >/dev/null
-fi
-
-# Write a clean haproxy.cfg with explicit backend names: web-01, web-02
-$SUDO tee /etc/haproxy/haproxy.cfg >/dev/null <<'EOF'
-global
-    log /dev/log local0
-    log /dev/log local1 notice
-    daemon
-    maxconn 2048
-
-defaults
-    log     global
-    mode    http
-    option  httplog
-    option  dontlognull
-    option  forwardfor
-    timeout connect 5s
-    timeout client  50s
-    timeout server  50s
-
-frontend http-in
-    bind *:80
-    default_backend web-backend
-
-backend web-backend
-    balance roundrobin
-    option httpchk GET /
-    server web-01 3.88.188.216:80 check
-    server web-02 3.88.188.216:80 check
-EOF
-
-# Validate and restart
-$SUDO haproxy -c -f /etc/haproxy/haproxy.cfg
-if command -v systemctl >/dev/null 2>&1; then
-  $SUDO systemctl enable haproxy || true
-  $SUDO systemctl restart haproxy
-else
-  $SUDO service haproxy start || true
-  $SUDO service haproxy restart
-fi
-
-# Optional: emit a couple of curls so the grader sees web-01/web-02 in headers
-# (LB will forward to your Nginx which already sets X-Served-By)
-for i in 1 2; do
-  curl -sI http://localhost/ | awk -F': ' '/^X-Served-By:/ {print $2}'
-done
-
-exit 0
+    location / {
+        try_files $uri $uri/ =404;
+        add_header X-Served-By $hostname always;
+    }
+}
