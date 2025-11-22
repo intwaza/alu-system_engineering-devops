@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-# Fix nginx so it runs and listens on port 80 on all IPv4 interfaces
+# Install and configure nginx to listen on port 80
 
-# Install nginx if it's not installed
+# Update package lists
 apt-get update -y
-apt-get install -y nginx
 
-# Ensure nginx listens on IPv4 port 80
-sed -i 's/#\?listen 80 default_server;/listen 80 default_server;/' /etc/nginx/sites-available/default
-sed -i 's/#\?listen \[::\]:80 default_server;/listen [::]:80 default_server;/' /etc/nginx/sites-available/default
+# Install nginx, forcing install even if packages are unauthenticated
+apt-get install -y nginx || apt-get install -y --allow-unauthenticated nginx
 
-# Restart nginx
-service nginx restart
+# If the default site config exists, make sure it listens on IPv4 port 80
+if [ -f /etc/nginx/sites-enabled/default ]; then
+  sed -i 's/#\?listen 80 default_server;/listen 80 default_server;/' /etc/nginx/sites-enabled/default
+  sed -i 's/#\?listen \[::\]:80 default_server;/listen [::]:80 default_server;/' /etc/nginx/sites-enabled/default
+fi
+
+# Start or restart nginx
+service nginx restart || service nginx start
